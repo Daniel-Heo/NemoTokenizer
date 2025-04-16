@@ -24,10 +24,11 @@ pip install nemo_tokenizer
 ```
 
 ### 소스에서 설치
+주의 ) xsimd include를 src 디렉토리에 넣어주셔야합니다. src/xsimd/xsimd.hpp 파일이 존재하도록.
 
 ```bash
-git clone https://github.com/username/nemo_tokenizer](https://github.com/Daniel-Heo/NemoTokenizer.git
-cd nemo_tokenizer
+git clone https://github.com/Daniel-Heo/NemoTokenizer.git
+cd NemoTokenizer
 pip install -e .
 ```
 
