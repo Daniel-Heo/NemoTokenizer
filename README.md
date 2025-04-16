@@ -17,10 +17,10 @@ NemoTokenizer는 효율적인 토큰화 처리를 위한 Python 패키지입니�
 - C++ 컴파일러 (C++14 지원)
 - CMake 3.12 이상
 
-### pip를 이용한 설치
+### pip를 이용한 설치 ( 미지원 )
 
 ```bash
-pip install nemo-tokenizer
+pip install nemo_tokenizer
 ```
 
 ### 소스에서 설치
