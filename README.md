@@ -26,7 +26,7 @@ pip install nemo_tokenizer
 ### 소스에서 설치
 
 ```bash
-git clone https://github.com/username/nemo_tokenizer.git
+git clone https://github.com/username/nemo_tokenizer](https://github.com/Daniel-Heo/NemoTokenizer.git
 cd nemo_tokenizer
 pip install -e .
 ```
