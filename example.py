@@ -14,11 +14,16 @@ def main():
     
     # 테스트할 문장
     text = "안녕하세요 세계! 이것은 NemoTokenizer 테스트입니다."
+    text_array = [text]*2
     print(f"원본 텍스트: {text}")
     
     # 토큰화
     tokens = tokenizer.tokenize(text)
     print(f"토큰: {tokens}")
+
+    # Batch 토큰화
+    tokens_array = tokenizer.batch_tokenize(text_array)
+    print(f"토큰: {tokens_array}")
     
     # 인코딩
     ids = tokenizer.encode(text)
