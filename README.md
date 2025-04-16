@@ -2,6 +2,8 @@
 
 NemoTokenizer는 효율적인 토큰화 처리를 위한 Python 패키지입니다. C++로 구현된 코어 기능을 Python 인터페이스로 감싸 성능과 사용성을 모두 갖추었습니다.
 
+현재 windows용만 테스트 되었습니다.
+
 ## 특징
 
 - SentencePiece 및 WordPiece 토크나이저 지원
@@ -29,7 +31,7 @@ pip install nemo_tokenizer
 ```bash
 git clone https://github.com/Daniel-Heo/NemoTokenizer.git
 cd NemoTokenizer
-pip install -e .
+build_install.bat
 ```
 
 ## 사용 예시
