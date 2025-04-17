@@ -64,15 +64,15 @@ text_array = [text]*2
 print(f"Original text: {text}")
 
 # Tokenize
-tokens = tokenizer.tokenize(text)
+tokens = tokenizer.tokenize(text, add_special_tokens=True)
 print(f"Tokens: {tokens}")
 
 # Batch tokenize
-tokens_array = tokenizer.batch_tokenize(text_array)
+tokens_array = tokenizer.batch_tokenize(text_array, add_special_tokens=True)
 print(f"Tokens: {tokens_array}")
 
 # Encoding
-ids = tokenizer.encode(text)
+ids = tokenizer.encode(text, add_special_tokens=True)
 print(f"Token IDs: {ids}")
 
 # Decoding
