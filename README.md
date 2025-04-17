@@ -30,8 +30,6 @@ pip install nemo_tokenizer
 
 ### Installation from source
 
-Note) You need to put the xsimd include in the src directory so that the src/xsimd/xsimd.hpp file exists.
-
 ```bash
 git clone https://github.com/Daniel-Heo/NemoTokenizer.git
 cd NemoTokenizer
