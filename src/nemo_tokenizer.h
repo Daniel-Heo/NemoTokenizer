@@ -278,21 +278,40 @@ public:
         std::vector<std::string> tokens;
         tokens.reserve(text.length() / 2);
         std::vector<std::string> words = splitWords(text);
-    
+
+        // 임시 버퍼를 한 번만 할당하여 재사용
+        std::string buffer;
+        buffer.reserve(text.length());
+
         for (const auto& word : words) {
-            std::string input = (decoderType == "WordPiece") ? word : subwordPrefix + word;
-            const char* input_ptr = input.c_str();
-            size_t end = input.size();
+            // 입력 준비 (WordPiece 또는 SentencePiece에 따라 다름)
+            const char* input_ptr;
+            size_t input_offset = 0;
+            size_t input_length;
+            
+            if (decoderType == "WordPiece") {
+                input_ptr = word.c_str();
+                input_length = word.length();
+            } else {
+                // SentencePiece인 경우 prefix 추가
+                buffer.clear();
+                buffer = subwordPrefix;
+                buffer.append(word);
+                input_ptr = buffer.c_str();
+                input_length = buffer.length();
+            }
+            
             size_t position = 0;
             bool isSubword = false;
-    
-            while (position < end) {
-                size_t len = end - position;
+
+            while (position < input_length) {
+                size_t remaining = input_length - position;
                 int matchedId = -1;
                 int matchedLen = 0;
-    
+
+                // Trie 순회
                 TrieNode* current = root;
-                for (size_t i = 0; i < len; ++i) {
+                for (size_t i = 0; i < remaining; ++i) {
                     unsigned char ch = static_cast<unsigned char>(input_ptr[position + i]);
                     if (!current->children[ch]) break;
                     current = current->children[ch];
@@ -301,31 +320,33 @@ public:
                         matchedLen = i + 1;
                     }
                 }
-    
+
                 if (matchedId != -1) {
-                    tokens.emplace_back(&input_ptr[position], matchedLen);
+                    // 직접 메모리에서 토큰 생성 (복사 최소화)
+                    tokens.emplace_back(input_ptr + position, matchedLen);
                     position += matchedLen;
                     isSubword = true;
                 } else {
-                    tokens.emplace_back(unkToken);
-    
+                    // UNK 토큰은 한 번만 복사
+                    tokens.push_back(unkToken);
+
+                    // UTF-8 문자 바이트 크기 계산
                     unsigned char c = input_ptr[position];
                     int byteCount = ((c & 0x80) == 0) ? 1 :
                                     ((c & 0xE0) == 0xC0) ? 2 :
                                     ((c & 0xF0) == 0xE0) ? 3 :
                                     ((c & 0xF8) == 0xF0) ? 4 : 1;
-    
-                    position += std::min(static_cast<size_t>(byteCount), end - position);
+
+                    position += std::min(static_cast<size_t>(byteCount), remaining);
                     isSubword = true;
                 }
             }
         }
-    
+
         return tokens;
     }
-    
 
-        /**
+    /**
      * 여러 텍스트를 토큰으로 분리합니다.
      * @param texts 토큰화할 텍스트 리스트
      * @return 각 텍스트에 대한 토큰 리스트의 리스트
@@ -349,67 +370,111 @@ public:
      */
     std::vector<int> encode(const std::string& text, bool add_special_tokens = true) const {
         std::vector<int> ids;
-        ids.reserve(text.length() / 2); // 평균 토큰 길이를 2으로 가정하고 공간 예약
+        ids.reserve(text.length() / 2 + (add_special_tokens ? 2 : 0)); // 평균 토큰 길이를 2로 가정하고 공간 예약
         std::vector<std::string> words = splitWords(text);
         
         if (add_special_tokens) {
             ids.push_back(startId);  // 시작 토큰 추가
         }
         
+        // 임시 버퍼를 한 번만 할당하여 재사용
+        std::string buffer;
+        buffer.reserve(text.length());
+        
         for (const auto& word : words) {
-            std::string input = (decoderType == "WordPiece") ? word : subwordPrefix + word;
+            // 입력 준비 (WordPiece 또는 SentencePiece에 따라 다름)
+            const char* input_ptr;
+            size_t input_length;
+            
+            if (decoderType == "WordPiece") {
+                input_ptr = word.c_str();
+                input_length = word.length();
+            } else {
+                // SentencePiece인 경우 prefix 추가
+                buffer.clear();
+                buffer = subwordPrefix;
+                buffer.append(word);
+                input_ptr = buffer.c_str();
+                input_length = buffer.length();
+            }
+            
             size_t position = 0;
-            size_t end = input.size();
             bool isSubword = false;
         
-            while (position < end) {
-                std::string substring = input.substr(position, end - position);
-                int subwordPrefixSize = 0;
-                if (isSubword && decoderType == "WordPiece") {
-                    substring = subwordPrefix + substring;
-                    subwordPrefixSize = subwordPrefix.size();
-                }
+            while (position < input_length) {
+                int matchedId = -1;
+                int matchedLen = 0;
                 
-                // Trie에서 토큰을 찾고 바로 ID를 가져옴
-                TrieNode* current = root;
-                int lastMatchedId = -1;
-                int lastMatchedPos = -1;
-        
-                const char* ptr = substring.c_str();
-                for (size_t i = 0; *ptr; ++i, ++ptr) {
-                    unsigned char ch = static_cast<unsigned char>(*ptr);
-                    if (!current->children[ch]) break;
-        
-                    current = current->children[ch];
-        
-                    if (current->isEnd) {
-                        lastMatchedId = current->id;
-                        lastMatchedPos = i;
+                // 필요한 경우만 서브워드 접두사 처리
+                if (isSubword && decoderType == "WordPiece") {
+                    buffer.clear();
+                    buffer = subwordPrefix;
+                    buffer.append(input_ptr + position, input_length - position);
+                    input_ptr = buffer.c_str();
+                    matchedLen = 0; // 매치된 길이 초기화
+                    
+                    // Trie에서 토큰을 찾고 바로 ID를 가져옴
+                    TrieNode* current = root;
+                    
+                    for (size_t i = 0; i < buffer.length(); ++i) {
+                        unsigned char ch = static_cast<unsigned char>(buffer[i]);
+                        if (!current->children[ch]) break;
+                        
+                        current = current->children[ch];
+                        
+                        if (current->isEnd) {
+                            matchedId = current->id;
+                            matchedLen = i + 1;
+                        }
+                    }
+                    
+                    if (matchedId != -1) {
+                        ids.push_back(matchedId);
+                        // 접두사 길이를 제외한 실제 진행된 위치 계산
+                        position += matchedLen - subwordPrefix.length();
+                    }
+                } else {
+                    // 일반 토큰 처리
+                    TrieNode* current = root;
+                    
+                    for (size_t i = 0; i < input_length - position; ++i) {
+                        unsigned char ch = static_cast<unsigned char>(input_ptr[position + i]);
+                        if (!current->children[ch]) break;
+                        
+                        current = current->children[ch];
+                        
+                        if (current->isEnd) {
+                            matchedId = current->id;
+                            matchedLen = i + 1;
+                        }
+                    }
+                    
+                    if (matchedId != -1) {
+                        ids.push_back(matchedId);
+                        position += matchedLen;
                     }
                 }
-        
-                if (lastMatchedId != -1) {
-                    ids.push_back(lastMatchedId);  // 토큰 ID 직접 추가
-                    position += lastMatchedPos + 1 - subwordPrefixSize;
-                    isSubword = true;
-                }
-                else {
-                    ids.push_back(unkId);  // UNK 토큰 ID 추가
-        
-                    char c = input[position];
+                
+                // 매치되지 않은 경우 UNK 토큰 추가
+                if (matchedId == -1) {
+                    ids.push_back(unkId);
+                    
+                    // UTF-8 문자 바이트 크기 계산
+                    char c = input_ptr[position];
                     int byteCount;
                     if ((c & 0x80) == 0) byteCount = 1;
                     else if ((c & 0xE0) == 0xC0) byteCount = 2;
                     else if ((c & 0xF0) == 0xE0) byteCount = 3;
                     else if ((c & 0xF8) == 0xF0) byteCount = 4;
                     else byteCount = 1;
-        
-                    if ((byteCount + position) > end)
-                        byteCount = end - position;
-        
+                    
+                    if ((byteCount + position) > input_length)
+                        byteCount = input_length - position;
+                    
                     position += byteCount;
-                    isSubword = true;
                 }
+                
+                isSubword = true;
             }
         }
         
