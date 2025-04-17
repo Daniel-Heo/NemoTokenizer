@@ -5,7 +5,7 @@ It's about 60% faster than blingfire.
 
 Currently, only the Windows version has been tested.
 
-sentencepiece is available. Wordpiece is debugging.
+Sentencepiece is available. Wordpiece is debugging.
 
 ## Features
 
