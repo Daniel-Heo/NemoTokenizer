@@ -5,6 +5,8 @@ It's about 60% faster than blingfire.
 
 Currently, only the Windows version has been tested.
 
+Sentencepiece is available. Wordpiece is debugging.
+
 ## Features
 
 - Support for SentencePiece and WordPiece tokenizers
