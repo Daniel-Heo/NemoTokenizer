@@ -25,28 +25,15 @@
 #include <xsimd/xsimd.hpp>
 #include "json.hpp"
 
-// Trie 검색 방식 선택 : 압축방식 Trie(Radix Trie)가 필요하면 적용을 고려해보자.
-#define TRIE_SEARCH_TYPE 1 // 0: Low memory,low speed  1: High memory,high speed 
-
-#if defined(_WIN32) || defined(_WIN64)
-#define SELECT_ANY  __declspec(selectany)
-#elif defined(__linux__)
-#define SELECT_ANY  __attribute__((weak))
-#elif defined(__APPLE__)
-#define SELECT_ANY  __attribute__((weak))
-#endif
-
-#define OPTIMIZED
-
-using STRING_LIST = std::list<std::string>;
-#define CONCAT(A, B) A.splice(A.end(),B)
-
-using json = nlohmann::json;
-using namespace std;
-
 // 플랫폼 독립적인 비트 연산 함수
 #if defined(_MSC_VER)
 #include <intrin.h>
+
+// Trie 검색 방식 선택 : 압축방식 Trie(Radix Trie)가 필요하면 적용을 고려해보자.
+#define TRIE_SEARCH_TYPE 1 // 0: Low memory,low speed  1: High memory,high speed 
+
+using json = nlohmann::json;
+using namespace std;
 
 inline unsigned int CountTrailingZeros64(uint64_t x) {
     unsigned long index;
@@ -138,6 +125,50 @@ private:
     // 토큰에서 ID로의 빠른 변환을 위한 맵
     std::unordered_map<std::string, int> tokenToIdMap;
 
+    // 특수 문자 룩업 테이블 추가
+    bool isSpecialChar[256];
+
+    // 공백 문자 룩업 테이블 추가
+    bool isWhitespaceChar[256];
+
+    // 룩업 테이블 초기화 함수
+    void initLookupTables() {
+        // 모든 문자를 일반 문자로 초기화
+        std::memset(isSpecialChar, false, sizeof(isSpecialChar));
+        std::memset(isWhitespaceChar, false, sizeof(isWhitespaceChar));
+        
+        // 공백 문자 설정 (ASCII 32, 9, 10, 13)
+        isSpecialChar[' '] = true;
+        isSpecialChar['\t'] = true;
+        isSpecialChar['\n'] = true;
+        isSpecialChar['\r'] = true;
+        
+        isWhitespaceChar[' '] = true;
+        isWhitespaceChar['\t'] = true;
+        isWhitespaceChar['\n'] = true;
+        isWhitespaceChar['\r'] = true;
+        
+        // ASCII 33-47 (!"#$%&'()*+,-./) 설정
+        for (unsigned char c = 33; c <= 47; ++c) {
+            isSpecialChar[c] = true;
+        }
+        
+        // ASCII 58-64 (:;<=>?@) 설정
+        for (unsigned char c = 58; c <= 64; ++c) {
+            isSpecialChar[c] = true;
+        }
+        
+        // ASCII 91-96 ([\]^_`) 설정
+        for (unsigned char c = 91; c <= 96; ++c) {
+            isSpecialChar[c] = true;
+        }
+        
+        // ASCII 123-126 ({|}~) 설정
+        for (unsigned char c = 123; c <= 126; ++c) {
+            isSpecialChar[c] = true;
+        }
+    }
+
     // 내부 함수
     std::pair<std::string, int> searchLastMatchedToken(const std::string& word, bool isSubword) const {
         TrieNode* current = root;
@@ -163,7 +194,7 @@ private:
     }
 
 public:
-    NemoTokenizer(): nodePool(nullptr), root(nullptr) {} // 생성자
+    NemoTokenizer(): nodePool(nullptr), root(nullptr) {initLookupTables();} // 생성자
     ~NemoTokenizer() { delete nodePool; } // 소멸자 (메모리 관리)
 
     void loadTokenizer(const std::string& filename) {
@@ -237,6 +268,8 @@ public:
     
         size_t vocabSize = tokenizer["model"]["vocab"].size();
         size_t estimatedNodes = vocabSize * 3;
+        //printf("subprefix: %s\n", subwordPrefix.c_str());
+        //printf("vocab size: %zu\n", vocabSize);
     
         delete nodePool;
         nodePool = new MemoryPool(estimatedNodes);
@@ -311,6 +344,15 @@ public:
 
                 // Trie 순회
                 TrieNode* current = root;
+                if (isSubword && decoderType == "WordPiece") { // wordpiece이고 단어 중간에 끊긴 경우 ##만큼 node 2번 이동
+                    unsigned char ch = subwordPrefix[0];
+                    if (!current->children[ch]) break;
+                    current = current->children[ch];
+                    ch = subwordPrefix[1];
+                    if (!current->children[ch]) break;
+                    current = current->children[ch];
+                }
+
                 for (size_t i = 0; i < remaining; ++i) {
                     unsigned char ch = static_cast<unsigned char>(input_ptr[position + i]);
                     if (!current->children[ch]) break;
@@ -323,7 +365,9 @@ public:
 
                 if (matchedId != -1) {
                     // 직접 메모리에서 토큰 생성 (복사 최소화)
-                    tokens.emplace_back(input_ptr + position, matchedLen);
+                    if (isSubword && decoderType == "WordPiece") {
+                        tokens.emplace_back(subwordPrefix + std::string(input_ptr + position, matchedLen));
+                    } else tokens.emplace_back(input_ptr + position, matchedLen);
                     position += matchedLen;
                     isSubword = true;
                 } else {
@@ -400,81 +444,53 @@ public:
             
             size_t position = 0;
             bool isSubword = false;
-        
+
             while (position < input_length) {
+                size_t remaining = input_length - position;
                 int matchedId = -1;
                 int matchedLen = 0;
-                
-                // 필요한 경우만 서브워드 접두사 처리
-                if (isSubword && decoderType == "WordPiece") {
-                    buffer.clear();
-                    buffer = subwordPrefix;
-                    buffer.append(input_ptr + position, input_length - position);
-                    input_ptr = buffer.c_str();
-                    matchedLen = 0; // 매치된 길이 초기화
-                    
-                    // Trie에서 토큰을 찾고 바로 ID를 가져옴
-                    TrieNode* current = root;
-                    
-                    for (size_t i = 0; i < buffer.length(); ++i) {
-                        unsigned char ch = static_cast<unsigned char>(buffer[i]);
-                        if (!current->children[ch]) break;
-                        
-                        current = current->children[ch];
-                        
-                        if (current->isEnd) {
-                            matchedId = current->id;
-                            matchedLen = i + 1;
-                        }
+
+                // Trie 순회
+                TrieNode* current = root;
+                if (isSubword && decoderType == "WordPiece") // wordpiece이고 단어 중간에 끊긴 경우 ##만큼 node 2번 이동
+                {
+                    unsigned char ch = subwordPrefix[0];
+                    if (!current->children[ch]) break;
+                    current = current->children[ch];
+                    ch = subwordPrefix[1];
+                    if (!current->children[ch]) break;
+                    current = current->children[ch];
+                }
+
+                for (size_t i = 0; i < remaining; ++i) {
+                    unsigned char ch = static_cast<unsigned char>(input_ptr[position + i]);
+                    if (!current->children[ch]) break;
+                    current = current->children[ch];
+                    if (current->isEnd) {
+                        matchedId = current->id;
+                        matchedLen = i + 1;
                     }
-                    
-                    if (matchedId != -1) {
-                        ids.push_back(matchedId);
-                        // 접두사 길이를 제외한 실제 진행된 위치 계산
-                        position += matchedLen - subwordPrefix.length();
-                    }
+                }
+
+                if (matchedId != -1) {
+                    // 직접 메모리에서 토큰 생성 (복사 최소화)
+                    ids.push_back(matchedId);
+                    position += matchedLen;
+                    isSubword = true;
                 } else {
-                    // 일반 토큰 처리
-                    TrieNode* current = root;
-                    
-                    for (size_t i = 0; i < input_length - position; ++i) {
-                        unsigned char ch = static_cast<unsigned char>(input_ptr[position + i]);
-                        if (!current->children[ch]) break;
-                        
-                        current = current->children[ch];
-                        
-                        if (current->isEnd) {
-                            matchedId = current->id;
-                            matchedLen = i + 1;
-                        }
-                    }
-                    
-                    if (matchedId != -1) {
-                        ids.push_back(matchedId);
-                        position += matchedLen;
-                    }
-                }
-                
-                // 매치되지 않은 경우 UNK 토큰 추가
-                if (matchedId == -1) {
+                    // UNK 토큰은 한 번만 복사
                     ids.push_back(unkId);
-                    
+
                     // UTF-8 문자 바이트 크기 계산
-                    char c = input_ptr[position];
-                    int byteCount;
-                    if ((c & 0x80) == 0) byteCount = 1;
-                    else if ((c & 0xE0) == 0xC0) byteCount = 2;
-                    else if ((c & 0xF0) == 0xE0) byteCount = 3;
-                    else if ((c & 0xF8) == 0xF0) byteCount = 4;
-                    else byteCount = 1;
-                    
-                    if ((byteCount + position) > input_length)
-                        byteCount = input_length - position;
-                    
-                    position += byteCount;
+                    unsigned char c = input_ptr[position];
+                    int byteCount = ((c & 0x80) == 0) ? 1 :
+                                    ((c & 0xE0) == 0xC0) ? 2 :
+                                    ((c & 0xF0) == 0xE0) ? 3 :
+                                    ((c & 0xF8) == 0xF0) ? 4 : 1;
+
+                    position += std::min(static_cast<size_t>(byteCount), remaining);
+                    isSubword = true;
                 }
-                
-                isSubword = true;
             }
         }
         
@@ -518,8 +534,9 @@ public:
                         // 서브워드는 접두사 없이 추가
                         result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                     } else {
+                        bool isSpecial = token.size() == 1 && isSpecialChar[static_cast<unsigned char>(token[0])];
                         // 일반 토큰은 앞에 공백 추가 (첫 토큰 제외)
-                        if (!result.empty()) {
+                        if (!isSpecial && !result.empty()) {
                             result.push_back(' ');
                         }
                         result.append(token);
@@ -669,7 +686,7 @@ public:
         std::vector<std::string> result;
         if (text.empty()) return result;
     
-        result.reserve(text.length() / 3); // 예상 단어 수 확보
+        result.reserve(text.length() / 2); // 예상 단어 수 확보
     
         const char* data = text.data();
         const size_t length = text.length();
@@ -680,49 +697,86 @@ public:
         using batch_bool_type = xsimd::batch_bool<int8_t>;
         constexpr size_t simd_size = batch_type::size;
     
+        // SIMD로 처리할 수 있는 부분 처리
         while (i + simd_size <= length) {
-            batch_type data_batch = xsimd::load_unaligned(reinterpret_cast<const int8_t*>(&data[i]));
+            uint64_t mask = 0;
+            
+            if( decoderType == "WordPiece" ) {
+                // SIMD 배치의 각 문자에 대해 isSpecialChar 테이블 참조
+                for (size_t j = 0; j < simd_size; ++j) {
+                    if (isSpecialChar[static_cast<unsigned char>(data[i + j])]) {
+                        mask |= (1ULL << j);
+                    }
+                }
+            } else {
+                batch_type data_batch = xsimd::load_unaligned(reinterpret_cast<const int8_t*>(&data[i]));
         
-            batch_bool_type is_space =
-                (data_batch == batch_type(' ')) |
-                (data_batch == batch_type('\t')) |
-                (data_batch == batch_type('\n')) |
-                (data_batch == batch_type('\r'));
-        
-            uint64_t mask = is_space.mask();
-        
+                batch_bool_type is_space =
+                    (data_batch == batch_type(' ')) |
+                    (data_batch == batch_type('\t')) |
+                    (data_batch == batch_type('\n')) |
+                    (data_batch == batch_type('\r'));
+            
+                mask = is_space.mask();
+            }
+            
             while (mask) {
                 int offset = CountTrailingZeros64(mask);
                 size_t pos = i + offset;
-        
+                
+                // 이전 위치부터 현재 특수 문자 위치까지 단어로 추가
                 if (pos > word_start) {
                     result.emplace_back(&data[word_start], pos - word_start);
                 }
-        
+                
+                // 공백이 아닌 특수 문자는 개별 토큰으로 추가
+                if (decoderType == "WordPiece" && !isWhitespaceChar[static_cast<unsigned char>(data[pos])]) {
+                    result.emplace_back(&data[pos], 1);
+                }
+                
                 word_start = pos + 1;
+                
+                // 처리한 비트 제거
                 mask &= ~(1ULL << offset);
             }
-        
+            
             i += simd_size;
         }
-    
-        // 나머지 처리 (SIMD 범위 밖)
+        
+        // 나머지 부분 처리 (SIMD로 처리할 수 없는 부분)
         for (; i < length; ++i) {
-            if (std::isspace(static_cast<unsigned char>(data[i]))) {
-                if (i > word_start) {
-                    result.emplace_back(&data[word_start], i - word_start);
+            if( decoderType == "WordPiece") {
+                if (isSpecialChar[static_cast<unsigned char>(data[i])]) {
+                    // 현재 위치 이전에 수집된 단어가 있으면 추가
+                    if (i > word_start) {
+                        result.emplace_back(&data[word_start], i - word_start);
+                    }
+                    
+                    // 공백이 아닌 특수 문자는 개별 토큰으로 추가
+                    if ( !isWhitespaceChar[static_cast<unsigned char>(data[i])]) {
+                        result.emplace_back(&data[i], 1);
+                    }
+                    
+                    word_start = i + 1;
                 }
-                word_start = i + 1;
+            } else {
+                if (std::isspace(static_cast<unsigned char>(data[i]))) {
+                    if (i > word_start) {
+                        result.emplace_back(&data[word_start], i - word_start);
+                    }
+                    word_start = i + 1;
+                }
             }
         }
-    
+        
         // 마지막 단어 처리
         if (word_start < length) {
             result.emplace_back(&data[word_start], length - word_start);
         }
-    
+        
         return result;
     }
+
 };
 
 #endif
