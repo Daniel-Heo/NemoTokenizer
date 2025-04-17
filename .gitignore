@@ -31,9 +31,6 @@
 *.out
 *.app
 .idea/
-res/
-cmake-build*/
-.DS_Store
 dist/
 build/
 ´Ù¿î/

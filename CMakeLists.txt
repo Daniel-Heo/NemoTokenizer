@@ -21,6 +21,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pybind11)
 
+include(FetchContent)
+FetchContent_Declare(
+    xsimd
+    GIT_REPOSITORY https://github.com/xtensor-stack/xsimd.git
+    GIT_TAG        13.2.0  # You can replace this with the specific version you want
+)
+FetchContent_MakeAvailable(xsimd)
+
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
 
 set(SOURCES
@@ -35,7 +43,7 @@ set(HEADERS
 
 pybind11_add_module(nemo_tokenizer_core ${SOURCES})
 
-target_include_directories(nemo_tokenizer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(nemo_tokenizer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${xsimd_SOURCE_DIR}/include)
 
 set_target_properties(nemo_tokenizer_core PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/nemo_tokenizer

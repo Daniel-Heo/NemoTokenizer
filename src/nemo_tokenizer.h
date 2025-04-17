@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #ifndef NEMO_TOKENIZER_H
 #define NEMO_TOKENIZER_H
 
@@ -22,7 +22,7 @@
 #include <thread>
 #include <iterator>
 #include <omp.h>  // OpenMP 헤더 추가
-#include "xsimd/xsimd.hpp"
+#include <xsimd/xsimd.hpp>
 #include "json.hpp"
 
 // Trie 검색 방식 선택 : 압축방식 Trie(Radix Trie)가 필요하면 적용을 고려해보자.
