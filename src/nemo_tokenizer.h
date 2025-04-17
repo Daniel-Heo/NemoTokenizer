@@ -491,54 +491,61 @@ public:
      * @return 복원된 텍스트
      */
     std::string decode(const std::vector<int>& ids) const {
+        // 결과 문자열의 예상 크기 계산 (초기값으로 토큰당 평균 4바이트 예상)
+        size_t estimatedSize = ids.size() * 4;
         std::string result;
-        result.reserve(ids.size() * 4); // 예상 텍스트 길이 미리 할당
+        result.reserve(estimatedSize);
+        
+        // 필요한 경우 서브워드 접두사 길이 미리 계산
+        const size_t prefixLength = subwordPrefix.length();
         
         for (size_t i = 0; i < ids.size(); ++i) {
             int id = ids[i];
             
-            // 특수 토큰 건너뛰기 옵션 처리
+            // 특수 토큰 건너뛰기
             if (id == startId || id == endId) {
                 continue;
             }
             
             auto it = idToTokenMap.find(id);
             if (it != idToTokenMap.end()) {
-                std::string token = it->second;
+                const std::string& token = it->second;
                 
-                // 토큰 유형에 따른 처리
+                // 디코더 타입에 따른 처리
                 if (decoderType == "WordPiece") {
-                    // WordPiece 처리
-                    if (token.rfind(subwordPrefix, 0) == 0) {
-                        // 서브워드(##으로 시작)는 공백 없이 이어붙임
-                        result += token.substr(subwordPrefix.size());
+                    // ##으로 시작하는지 확인
+                    if (token.size() > prefixLength && token.compare(0, prefixLength, subwordPrefix) == 0) {
+                        // 서브워드는 접두사 없이 추가
+                        result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                     } else {
                         // 일반 토큰은 앞에 공백 추가 (첫 토큰 제외)
                         if (!result.empty()) {
-                            result += ' ';
+                            result.push_back(' ');
                         }
-                        result += token;
+                        result.append(token);
                     }
                 } else if (decoderType == "Metaspace") {
-                    // SentencePiece 처리
-                    bool isWordStart = token.rfind(subwordPrefix, 0) == 0;
+                    // ? 접두사로 시작하는지 확인
+                    bool isWordStart = token.size() > prefixLength && 
+                                       token.compare(0, prefixLength, subwordPrefix) == 0;
                     
                     if (isWordStart) {
-                        // 단어 시작 토큰이면 앞에 공백 추가 (첫 토큰 제외)
+                        // 단어 시작 토큰이면 공백 추가 (첫 토큰 제외)
                         if (!result.empty()) {
-                            result += ' ';
+                            result.push_back(' ');
                         }
-                        result += token.substr(subwordPrefix.size());
+                        // 접두사를 제외한 나머지 부분 추가
+                        result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                     } else {
-                        // 단어 중간/끝 토큰이면 공백 없이 이어붙임
-                        result += token;
+                        // 다른 토큰은 그대로 추가
+                        result.append(token);
                     }
                 } else {
-                    // 기타 디코더 유형 처리
+                    // 기타 디코더 유형
                     if (!result.empty()) {
-                        result += ' ';
+                        result.push_back(' ');
                     }
-                    result += token;
+                    result.append(token);
                 }
             }
         }
@@ -594,50 +601,57 @@ public:
      * @return 복원된 텍스트
      */
     std::string convert_tokens_to_text(const std::vector<std::string>& tokens) const {
+        // 토큰당 평균 길이를 4로 가정하고 전체 예상 길이 계산
+        size_t estimatedSize = tokens.size() * 4;
         std::string result;
-        result.reserve(tokens.size() * 4); // 예상 텍스트 길이 미리 할당
+        result.reserve(estimatedSize);
+        
+        // 필요한 상수값 미리 계산
+        const size_t prefixLength = subwordPrefix.length();
         
         for (size_t i = 0; i < tokens.size(); ++i) {
             const std::string& token = tokens[i];
             
-            // 특수 토큰(시작/종료) 건너뛰기
+            // 특수 토큰 건너뛰기
             if (token == startToken || token == endToken) {
                 continue;
             }
             
-            // 토큰 유형에 따른 처리
+            // 디코더 타입에 따른 처리
             if (decoderType == "WordPiece") {
-                // WordPiece 처리
-                if (token.rfind(subwordPrefix, 0) == 0) {
-                    // 서브워드(##으로 시작)는 공백 없이 이어붙임
-                    result += token.substr(subwordPrefix.size());
+                // 서브워드 확인 (접두사로 시작하는지)
+                if (token.size() > prefixLength && token.compare(0, prefixLength, subwordPrefix) == 0) {
+                    // 서브워드는 접두사 제외하고 바로 추가
+                    result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                 } else {
-                    // 일반 토큰은 앞에 공백 추가 (첫 토큰 제외)
+                    // 일반 토큰은 공백 추가 (첫 토큰 제외)
                     if (!result.empty()) {
-                        result += ' ';
+                        result.push_back(' ');
                     }
-                    result += token;
+                    result.append(token);
                 }
             } else if (decoderType == "Metaspace") {
-                // SentencePiece 처리
-                bool isWordStart = token.rfind(subwordPrefix, 0) == 0;
+                // 단어 시작 토큰 확인
+                bool isWordStart = token.size() > prefixLength && 
+                                   token.compare(0, prefixLength, subwordPrefix) == 0;
                 
                 if (isWordStart) {
-                    // 단어 시작 토큰이면 앞에 공백 추가 (첫 토큰 제외)
+                    // 단어 시작 토큰은 공백 추가 (첫 토큰 제외)
                     if (!result.empty()) {
-                        result += ' ';
+                        result.push_back(' ');
                     }
-                    result += token.substr(subwordPrefix.size());
+                    // 접두사 제외하고 추가
+                    result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                 } else {
-                    // 단어 중간/끝 토큰이면 공백 없이 이어붙임
-                    result += token;
+                    // 일반 토큰은 바로 추가
+                    result.append(token);
                 }
             } else {
-                // 기타 디코더 유형 처리
+                // 기타 디코더 타입
                 if (!result.empty()) {
-                    result += ' ';
+                    result.push_back(' ');
                 }
-                result += token;
+                result.append(token);
             }
         }
         
