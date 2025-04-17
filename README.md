@@ -18,7 +18,7 @@ Currently, only the Windows version has been tested.
 
 ### Requirements
 
-- Python 3.6 or higher
+- Python 3.7 or higher
 - C++ compiler (with C++14 support)
 - CMake 3.12 or higher
 
