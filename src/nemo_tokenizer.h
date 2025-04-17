@@ -307,7 +307,7 @@ public:
      * @param text 토큰화할 텍스트
      * @return 토큰 리스트
      */
-    std::vector<std::string> tokenize(const std::string& text) const {
+    std::vector<std::string> tokenize(const std::string& text, bool add_special_tokens = true) const {
         std::vector<std::string> tokens;
         tokens.reserve(text.length() / 2);
         std::vector<std::string> words = splitWords(text);
@@ -315,6 +315,10 @@ public:
         // 임시 버퍼를 한 번만 할당하여 재사용
         std::string buffer;
         buffer.reserve(text.length());
+
+        if (add_special_tokens) {
+            tokens.emplace_back(startToken);  // 시작 토큰 추가
+        }
 
         for (const auto& word : words) {
             // 입력 준비 (WordPiece 또는 SentencePiece에 따라 다름)
@@ -387,20 +391,25 @@ public:
             }
         }
 
+        if (add_special_tokens) {
+            tokens.emplace_back(endToken);  // 종료 토큰 추가
+        }
+
         return tokens;
     }
 
     /**
      * 여러 텍스트를 토큰으로 분리합니다.
      * @param texts 토큰화할 텍스트 리스트
+     * @param add_special_tokens 특수 토큰(시작, 종료) 추가 여부
      * @return 각 텍스트에 대한 토큰 리스트의 리스트
      */
-    std::vector<std::vector<std::string>> batch_tokenize(const std::vector<std::string>& texts) const {
+    std::vector<std::vector<std::string>> batch_tokenize(const std::vector<std::string>& texts, bool add_special_tokens = true) const {
         std::vector<std::vector<std::string>> result(texts.size());
         omp_set_num_threads(3); // 실험적으로 조정
         #pragma omp parallel for schedule(dynamic, 1)
         for (int i = 0; i < static_cast<int>(texts.size()); ++i) {
-            result[i] = tokenize(texts[i]);
+            result[i] = tokenize(texts[i], add_special_tokens);
         }
     
         return result;
@@ -418,7 +427,7 @@ public:
         std::vector<std::string> words = splitWords(text);
         
         if (add_special_tokens) {
-            ids.push_back(startId);  // 시작 토큰 추가
+            ids.emplace_back(startId);  // 시작 토큰 추가
         }
         
         // 임시 버퍼를 한 번만 할당하여 재사용

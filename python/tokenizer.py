@@ -47,24 +47,26 @@ class NemoTokenizer:
         
         self._tokenizer.loadTokenizer(tokenizer_file)
     
-    def batch_tokenize(self, texts: List[str]) -> List[List[str]]:
+    def batch_tokenize(self, texts: List[str], add_special_tokens: bool = True) -> List[List[str]]:
         """
         여러 텍스트를 한번에 토큰화
         
         Args:
             texts: 토큰화할 텍스트 리스트
+            add_special_tokens: 특수 토큰 추가 여부
             
         Returns:
             각 텍스트에 대한 토큰 리스트의 리스트
         """
         return self._tokenizer.batch_tokenize(texts)
     
-    def tokenize(self, text: str) -> List[str]:
+    def tokenize(self, text: str, add_special_tokens: bool = True) -> List[str]:
         """
         텍스트를 토큰으로 분리
         
         Args:
             text: 토큰화할 텍스트
+            add_special_tokens: 특수 토큰 추가 여부
             
         Returns:
             토큰 리스트
@@ -77,6 +79,7 @@ class NemoTokenizer:
         
         Args:
             text: 인코딩할 텍스트
+            add_special_tokens: 특수 토큰 추가 여부
             
         Returns:
             토큰 ID 리스트

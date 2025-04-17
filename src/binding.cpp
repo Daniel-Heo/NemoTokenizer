@@ -10,8 +10,10 @@ PYBIND11_MODULE(nemo_tokenizer_core, m) {
     py::class_<NemoTokenizer>(m, "NemoTokenizerCore")
         .def(py::init<>())
         .def("loadTokenizer", &NemoTokenizer::loadTokenizer)
-        .def("tokenize", &NemoTokenizer::tokenize)
-        .def("batch_tokenize", &NemoTokenizer::batch_tokenize)
+        .def("tokenize", &NemoTokenizer::tokenize, 
+            py::arg("text"), py::arg("add_special_tokens") = true)
+        .def("batch_tokenize", &NemoTokenizer::batch_tokenize, 
+            py::arg("text"), py::arg("add_special_tokens") = true)
         .def("encode", &NemoTokenizer::encode, 
              py::arg("text"), py::arg("add_special_tokens") = true)
         .def("decode", &NemoTokenizer::decode, 
