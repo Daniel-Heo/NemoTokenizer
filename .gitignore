@@ -39,3 +39,4 @@ nemo_tokenizer.egg-info/
 xsimd/
 *.json
 test_tokenizer.py
+test_token.py
