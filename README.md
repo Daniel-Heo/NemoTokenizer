@@ -1,7 +1,7 @@
 ﻿# NemoTokenizer
 
 NemoTokenizer is a Python package for efficient tokenization processing. It wraps core functionality implemented in C++ with a Python interface, providing both performance and usability.
-It's about 25% faster than blingfire.
+It's about 60% faster than blingfire.
 
 Currently, only the Windows version has been tested.
 
@@ -18,7 +18,7 @@ Currently, only the Windows version has been tested.
 
 ### Requirements
 
-- Python 3.6 or higher
+- Python 3.7 or higher
 - C++ compiler (with C++14 support)
 - CMake 3.12 or higher
 
