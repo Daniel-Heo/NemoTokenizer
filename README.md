@@ -26,6 +26,15 @@ tokenize_time = time.time() - start_time
 - Simple Python API
 
 ## Installation
+Window
+```
+build_install.bat
+```
+Linux
+```
+chmod 755 build_install.sh
+build_install.sh
+```
 
 ### Requirements
 
