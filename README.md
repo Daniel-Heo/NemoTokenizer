@@ -2,7 +2,8 @@
 
 NemoTokenizer is a Python package for efficient tokenization processing. It wraps core functionality implemented in C++ with a Python interface, providing both performance and usability.
 
-Currently, only the Windows version has been tested.
+Windows install has been tested.
+Linux install has been tested.
 
 ```
 long_text = "자연어 처리(Natural Language Processing)는 컴퓨터가 인간의 언어를 이해하고 처리할 수 있게 하는 인공지능의 한 분야입니다. " * 10
