@@ -38,6 +38,7 @@ nemo_tokenizer/
 nemo_tokenizer.egg-info/
 xsimd/
 model/
+Toilet/
 *.json
 test_tokenizer.py
 test_token.py

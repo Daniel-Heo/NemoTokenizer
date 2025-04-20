@@ -3,15 +3,52 @@ NemoTokenizer의 Python 인터페이스
 """
 
 import os
+import sys
+import importlib.util
 from typing import List, Union, Dict, Any, Optional
 
-try:
-    from .nemo_tokenizer_core import NemoTokenizerCore
-except ImportError:
-    raise ImportError(
-        "NemoTokenizer C++ 확장 모듈을 가져올 수 없습니다. "
-        "패키지를 올바르게 설치했는지 확인하세요."
-    )
+
+# C++ 확장 모듈 로딩 시도
+def _load_extension():
+    try:
+        # 먼저 일반적인 임포트 시도
+        from .nemo_tokenizer_core import NemoTokenizerCore
+        return NemoTokenizerCore
+    except ImportError:
+        # 모듈 경로 직접 찾기 시도
+        try:
+            # 현재 파일의 디렉토리 경로
+            module_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # 다양한 확장자 시도 (플랫폼에 따라 달라질 수 있음)
+            for ext in ['.so', '.pyd', '.dll', '.dylib']:
+                module_path = os.path.join(module_dir, f"nemo_tokenizer_core{ext}")
+                if os.path.exists(module_path):
+                    spec = importlib.util.spec_from_file_location("nemo_tokenizer_core", module_path)
+                    if spec:
+                        module = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+                        return module.NemoTokenizerCore
+            
+            # 모듈을 찾을 수 없음
+            raise ImportError(
+                "NemoTokenizer C++ 확장 모듈을 가져올 수 없습니다. "
+                "파일 경로: {} 에서 모듈을 찾을 수 없습니다. "
+                "패키지를 올바르게 설치했는지 확인하세요. "
+                "Error: {}".format(module_dir, str(sys.exc_info()[1]))
+            )
+        except Exception as e:
+            # 디버깅을 위한 자세한 오류 메시지
+            raise ImportError(
+                "NemoTokenizer C++ 확장 모듈을 로드하는 중 오류가 발생했습니다. "
+                "패키지를 올바르게 설치했는지 확인하세요. "
+                "Error: {}".format(str(e))
+            )
+
+
+# C++ 확장 모듈 로딩 시도
+NemoTokenizerCore = _load_extension()
+
 
 
 class NemoTokenizer:

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #ifndef NEMO_TOKENIZER_H
 #define NEMO_TOKENIZER_H
 
@@ -25,15 +25,15 @@
 #include <xsimd/xsimd.hpp>
 #include "json.hpp"
 
+// JSON 네임스페이스 명시적 선언
+using nlohmann::json;
+
 // 플랫폼 독립적인 비트 연산 함수
 #if defined(_MSC_VER)
 #include <intrin.h>
 
 // Trie 검색 방식 선택 : 압축방식 Trie(Radix Trie)가 필요하면 적용을 고려해보자.
 #define TRIE_SEARCH_TYPE 1 // 0: Low memory,low speed  1: High memory,high speed 
-
-using json = nlohmann::json;
-using namespace std;
 
 inline unsigned int CountTrailingZeros64(uint64_t x) {
     unsigned long index;
