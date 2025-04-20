@@ -7,7 +7,7 @@ Currently, only the Windows version has been tested.
 ```
 long_text = "자연어 처리(Natural Language Processing)는 컴퓨터가 인간의 언어를 이해하고 처리할 수 있게 하는 인공지능의 한 분야입니다. " * 10
 start_time = time.time()
-for _ in 100000:
+for _ in range(100000):
   tokens = tokenizer(long_text, return_tensors="pt")["input_ids"]
 tokenize_time = time.time() - start_time
 ```
