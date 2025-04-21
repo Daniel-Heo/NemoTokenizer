@@ -69,6 +69,7 @@ class NemoTokenizer {
 private:
     struct TrieNode {
         bool isEnd;
+        bool isSpecial;  // 특수 토큰 여부 플래그 추가
         int id;
 #if TRIE_SEARCH_TYPE == 1 // 속도 향상을 위한 방법
         TrieNode* children[256];
@@ -76,7 +77,7 @@ private:
         std::unordered_map<char, TrieNode*> children;
 #endif
 
-        TrieNode(): isEnd(false), id(-1) { }
+        TrieNode(): isEnd(false), isSpecial(false), id(-1) { }
     };
 
     struct MemoryPool {
@@ -98,6 +99,7 @@ private:
         
             // node가 처음 사용될 때만 명시적으로 초기화
             node->isEnd = false;
+            node->isSpecial = false;  // 특수 토큰 초기화 추가
             node->id = -1;
 #if TRIE_SEARCH_TYPE == 1
             memset(node->children, 0, sizeof(node->children));
@@ -105,6 +107,15 @@ private:
         
             return node;
         }
+    };
+
+    // 토큰 정보를 포함하는 구조체
+    struct TokenInfo {
+        std::string token;
+        bool isSpecial;
+        
+        TokenInfo(const std::string& t = "", bool special = false)
+            : token(t), isSpecial(special) {}
     };
 
     // 멤버 변수
@@ -119,8 +130,8 @@ private:
     int endId;               // 종료 토큰 ID
     std::string subwordPrefix; // SentencePiece의 replacement 값 또는 WordPiece의 prefix 값
     
-    // ID에서 토큰으로의 빠른 변환을 위한 맵
-    std::unordered_map<int, std::string> idToTokenMap;
+    // ID에서 토큰 정보로의 빠른 변환을 위한 맵 (isSpecial 정보 포함)
+    std::unordered_map<int, TokenInfo> idToTokenMap;
     
     // 토큰에서 ID로의 빠른 변환을 위한 맵
     std::unordered_map<std::string, int> tokenToIdMap;
@@ -191,6 +202,25 @@ private:
         if (lastMatchedId != -1) return std::make_pair(word.substr(0, lastMatchedPos + 1), lastMatchedId);
     
         return { "", -1 };
+    }
+
+    // 토큰 문자열이 특수 토큰인지 확인하는 함수
+    bool isSpecialToken(const std::string& token) const {
+        // Trie 구조를 통해 해당 토큰이 존재하는지 확인
+        TrieNode* current = root;
+        for (unsigned char ch : token) {
+            if (!current->children[ch]) return false;
+            current = current->children[ch];
+        }
+        
+        // 토큰이 존재하고 특수 토큰으로 표시되었는지 확인
+        return current->isEnd && current->isSpecial;
+    }
+
+    // ID가 특수 토큰 ID인지 확인하는 함수
+    bool isSpecialTokenId(int id) const {
+        auto it = idToTokenMap.find(id);
+        return (it != idToTokenMap.end() && it->second.isSpecial);
     }
 
 public:
@@ -281,12 +311,16 @@ public:
         idToTokenMap.reserve(vocabSize);
         tokenToIdMap.reserve(vocabSize);
     
+        // 기본 어휘 로드
         for (auto it = tokenizer["model"]["vocab"].begin(); it != tokenizer["model"]["vocab"].end(); ++it) {
             std::string token = it.key();
             int token_id = it.value().get<int>();
     
+            // 특수 토큰 여부 확인 (기본적으로 모두 일반 토큰으로 설정)
+            bool isSpecial = false;
+            
             // 양방향 매핑 추가
-            idToTokenMap[token_id] = token;
+            idToTokenMap[token_id] = TokenInfo(token, isSpecial);
             tokenToIdMap[token] = token_id;
     
             TrieNode* current = root;
@@ -299,7 +333,106 @@ public:
             }
             current->isEnd = true;
             current->id = token_id;
+            current->isSpecial = isSpecial;
         }
+        
+        // added_tokens에서 special=true 토큰 설정
+        if (tokenizer.contains("added_tokens")) {
+            for (const auto& token : tokenizer["added_tokens"]) {
+                if (token.contains("content") && token.contains("id") && token.contains("special")) {
+                    std::string tokenContent = token["content"].get<std::string>();
+                    int tokenId = token["id"].get<int>();
+                    bool isSpecial = token["special"].get<bool>();
+                    
+                    if (isSpecial) {
+                        // 이미 등록된 토큰이면 특수 토큰으로 표시
+                        auto idIt = idToTokenMap.find(tokenId);
+                        if (idIt != idToTokenMap.end()) {
+                            idIt->second.isSpecial = true;
+                        } else {
+                            // 새 토큰이면 추가
+                            idToTokenMap[tokenId] = TokenInfo(tokenContent, true);
+                            tokenToIdMap[tokenContent] = tokenId;
+                        }
+                        
+                        // Trie에도 설정
+                        TrieNode* current = root;
+                        for (unsigned char ch : tokenContent) {
+                            if (!current->children[ch]) {
+                                current->children[ch] = nodePool->allocate();
+                            }
+                            current = current->children[ch];
+                        }
+                        current->isEnd = true;
+                        current->id = tokenId;
+                        current->isSpecial = true;
+                    }
+                }
+            }
+        }
+        
+        // 시작, 종료, UNK 토큰을 특수 토큰으로 설정
+        // idToTokenMap에 설정
+        auto startIt = idToTokenMap.find(startId);
+        if (startIt != idToTokenMap.end()) {
+            startIt->second.isSpecial = true;
+        } else {
+            idToTokenMap[startId] = TokenInfo(startToken, true);
+            tokenToIdMap[startToken] = startId;
+        }
+        
+        auto endIt = idToTokenMap.find(endId);
+        if (endIt != idToTokenMap.end()) {
+            endIt->second.isSpecial = true;
+        } else {
+            idToTokenMap[endId] = TokenInfo(endToken, true);
+            tokenToIdMap[endToken] = endId;
+        }
+        
+        auto unkIt = idToTokenMap.find(unkId);
+        if (unkIt != idToTokenMap.end()) {
+            unkIt->second.isSpecial = true;
+        } else {
+            idToTokenMap[unkId] = TokenInfo(unkToken, true);
+            tokenToIdMap[unkToken] = unkId;
+        }
+        
+        // Trie에도 설정
+        // 시작 토큰
+        TrieNode* current = root;
+        for (unsigned char ch : startToken) {
+            if (!current->children[ch]) {
+                current->children[ch] = nodePool->allocate();
+            }
+            current = current->children[ch];
+        }
+        current->isEnd = true;
+        current->id = startId;
+        current->isSpecial = true;
+        
+        // 종료 토큰
+        current = root;
+        for (unsigned char ch : endToken) {
+            if (!current->children[ch]) {
+                current->children[ch] = nodePool->allocate();
+            }
+            current = current->children[ch];
+        }
+        current->isEnd = true;
+        current->id = endId;
+        current->isSpecial = true;
+        
+        // UNK 토큰
+        current = root;
+        for (unsigned char ch : unkToken) {
+            if (!current->children[ch]) {
+                current->children[ch] = nodePool->allocate();
+            }
+            current = current->children[ch];
+        }
+        current->isEnd = true;
+        current->id = unkId;
+        current->isSpecial = true;
     }
 
     /**
@@ -513,9 +646,10 @@ public:
     /**
      * 토큰 ID 리스트를 텍스트로 변환합니다.
      * @param ids 변환할 토큰 ID 리스트
+     * @param skip_special_tokens 특수 토큰을 제외할지 여부
      * @return 복원된 텍스트
      */
-    std::string decode(const std::vector<int>& ids) const {
+    std::string decode(const std::vector<int>& ids, bool skip_special_tokens = true) const {
         // 결과 문자열의 예상 크기 계산 (초기값으로 토큰당 평균 4바이트 예상)
         size_t estimatedSize = ids.size() * 4;
         std::string result;
@@ -527,19 +661,19 @@ public:
         for (size_t i = 0; i < ids.size(); ++i) {
             int id = ids[i];
             
-            // 특수 토큰 건너뛰기
-            if (id == startId || id == endId) {
+            // 특수 토큰 건너뛰기 (del_special_tokens가 true인 경우에만)
+            if (skip_special_tokens && isSpecialTokenId(id)) {
                 continue;
             }
             
             auto it = idToTokenMap.find(id);
             if (it != idToTokenMap.end()) {
-                const std::string& token = it->second;
+                const std::string& token = it->second.token;
                 
                 // 디코더 타입에 따른 처리
                 if (decoderType == "WordPiece") {
                     // ##으로 시작하는지 확인
-                    if (token.size() > prefixLength && token.compare(0, prefixLength, subwordPrefix) == 0) {
+                    if (token.size() >= prefixLength && token.compare(0, prefixLength, subwordPrefix) == 0) {
                         // 서브워드는 접두사 없이 추가
                         result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                     } else {
@@ -552,8 +686,10 @@ public:
                     }
                 } else if (decoderType == "Metaspace") {
                     // ? 접두사로 시작하는지 확인
-                    bool isWordStart = token.size() > prefixLength && 
+                    bool isWordStart = token.size() >= prefixLength && 
                                        token.compare(0, prefixLength, subwordPrefix) == 0;
+
+                    //printf("#%s[%d] ", token.c_str(), token.size());
                     
                     if (isWordStart) {
                         // 단어 시작 토큰이면 공백 추가 (첫 토큰 제외)
@@ -582,11 +718,16 @@ public:
     /**
      * 토큰 리스트를 ID 리스트로 변환합니다.
      * @param tokens 변환할 토큰 리스트
+ * @param add_special_tokens 시작/종료 특수 토큰 추가 여부
      * @return 토큰 ID 리스트
      */
-    std::vector<int> convert_tokens_to_ids(const std::vector<std::string>& tokens) const {
+std::vector<int> convert_tokens_to_ids(const std::vector<std::string>& tokens, bool add_special_tokens = true) const {
         std::vector<int> ids;
-        ids.reserve(tokens.size());
+    ids.reserve(tokens.size() + (add_special_tokens ? 2 : 0));
+    
+    if (add_special_tokens) {
+        ids.push_back(startId);
+    }
         
         for (const auto& token : tokens) {
             auto it = tokenToIdMap.find(token);
@@ -597,22 +738,32 @@ public:
             }
         }
         
+    if (add_special_tokens) {
+        ids.push_back(endId);
+    }
+    
         return ids;
     }
 
     /**
      * ID 리스트를 토큰 리스트로 변환합니다.
      * @param ids 변환할 ID 리스트
+     * @param skip_special_tokens 특수 토큰을 제외할지 여부
      * @return 토큰 리스트
      */
-    std::vector<std::string> convert_ids_to_tokens(const std::vector<int>& ids) const {
+std::vector<std::string> convert_ids_to_tokens(const std::vector<int>& ids, bool skip_special_tokens = true) const {
         std::vector<std::string> tokens;
         tokens.reserve(ids.size());
         
         for (int id : ids) {
+        // 특수 토큰 건너뛰기 (del_special_tokens가 true인 경우에만)
+        if (skip_special_tokens && isSpecialTokenId(id)) {
+            continue;
+        }
+        
             auto it = idToTokenMap.find(id);
             if (it != idToTokenMap.end()) {
-                tokens.push_back(it->second);
+            tokens.push_back(it->second.token);
             } else {
                 tokens.push_back(unkToken);
             }
@@ -624,9 +775,10 @@ public:
     /**
      * 토큰 리스트를 원본 텍스트로 변환합니다.
      * @param tokens 변환할 토큰 리스트
+ * @param skip_special_tokens 특수 토큰을 제외할지 여부
      * @return 복원된 텍스트
      */
-    std::string convert_tokens_to_text(const std::vector<std::string>& tokens) const {
+std::string convert_tokens_to_text(const std::vector<std::string>& tokens, bool skip_special_tokens = true) const {
         // 토큰당 평균 길이를 4로 가정하고 전체 예상 길이 계산
         size_t estimatedSize = tokens.size() * 4;
         std::string result;
@@ -638,15 +790,15 @@ public:
         for (size_t i = 0; i < tokens.size(); ++i) {
             const std::string& token = tokens[i];
             
-            // 특수 토큰 건너뛰기
-            if (token == startToken || token == endToken) {
+        // 특수 토큰 건너뛰기 (del_special_tokens가 true인 경우에만)
+        if (skip_special_tokens && isSpecialToken(token)) {
                 continue;
             }
             
             // 디코더 타입에 따른 처리
             if (decoderType == "WordPiece") {
                 // 서브워드 확인 (접두사로 시작하는지)
-                if (token.size() > prefixLength && token.compare(0, prefixLength, subwordPrefix) == 0) {
+                if (token.size() >= prefixLength && token.compare(0, prefixLength, subwordPrefix) == 0) {
                     // 서브워드는 접두사 제외하고 바로 추가
                     result.append(token.c_str() + prefixLength, token.size() - prefixLength);
                 } else {
@@ -658,7 +810,7 @@ public:
                 }
             } else if (decoderType == "Metaspace") {
                 // 단어 시작 토큰 확인
-                bool isWordStart = token.size() > prefixLength && 
+                bool isWordStart = token.size() >= prefixLength && 
                                    token.compare(0, prefixLength, subwordPrefix) == 0;
                 
                 if (isWordStart) {

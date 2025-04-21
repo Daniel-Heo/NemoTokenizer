@@ -123,48 +123,52 @@ class NemoTokenizer:
         """
         return self._tokenizer.encode(text, add_special_tokens)
     
-    def decode(self, ids: List[int]) -> str:
+    def decode(self, ids: List[int], skip_special_tokens: bool = True) -> str:
         """
         토큰 ID를 텍스트로 변환
         
         Args:
             ids: 디코딩할 토큰 ID 리스트
+            skip_special_tokens: 특수 토큰 삭제 여부
             
         Returns:
             복원된 텍스트
         """
         return self._tokenizer.decode(ids)
     
-    def convert_tokens_to_ids(self, tokens: List[str]) -> List[int]:
+    def convert_tokens_to_ids(self, tokens: List[str], add_special_tokens: bool = True) -> List[int]:
         """
         토큰을 ID로 변환
         
         Args:
             tokens: 변환할 토큰 리스트
+            add_special_tokens: 특수 토큰 추가 여부
             
         Returns:
             토큰 ID 리스트
         """
         return self._tokenizer.convert_tokens_to_ids(tokens)
     
-    def convert_ids_to_tokens(self, ids: List[int]) -> List[str]:
+    def convert_ids_to_tokens(self, ids: List[int], skip_special_tokens: bool = True) -> List[str]:
         """
         ID를 토큰으로 변환
         
         Args:
             ids: 변환할 ID 리스트
+            skip_special_tokens: 특수 토큰 삭제 여부
             
         Returns:
             토큰 리스트
         """
         return self._tokenizer.convert_ids_to_tokens(ids)
     
-    def convert_tokens_to_text(self, tokens: List[str]) -> str:
+    def convert_tokens_to_text(self, tokens: List[str], skip_special_tokens: bool = True) -> str:
         """
         토큰을 원본 텍스트로 변환
         
         Args:
             tokens: 변환할 토큰 리스트
+            skip_special_tokens: 특수 토큰 삭제 여부
             
         Returns:
             복원된 텍스트
