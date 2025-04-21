@@ -95,7 +95,7 @@ class NemoTokenizer:
         Returns:
             각 텍스트에 대한 토큰 리스트의 리스트
         """
-        return self._tokenizer.batch_tokenize(texts)
+        return self._tokenizer.batch_tokenize(texts, add_special_tokens)
     
     def tokenize(self, text: str, add_special_tokens: bool = True) -> List[str]:
         """
@@ -108,7 +108,7 @@ class NemoTokenizer:
         Returns:
             토큰 리스트
         """
-        return self._tokenizer.tokenize(text)
+        return self._tokenizer.tokenize(text, add_special_tokens)
     
     def encode(self, text: str, add_special_tokens: bool = True) -> List[int]:
         """
@@ -134,7 +134,7 @@ class NemoTokenizer:
         Returns:
             복원된 텍스트
         """
-        return self._tokenizer.decode(ids)
+        return self._tokenizer.decode(ids, skip_special_tokens)
     
     def convert_tokens_to_ids(self, tokens: List[str], add_special_tokens: bool = True) -> List[int]:
         """
@@ -147,7 +147,7 @@ class NemoTokenizer:
         Returns:
             토큰 ID 리스트
         """
-        return self._tokenizer.convert_tokens_to_ids(tokens)
+        return self._tokenizer.convert_tokens_to_ids(tokens, add_special_tokens)
     
     def convert_ids_to_tokens(self, ids: List[int], skip_special_tokens: bool = True) -> List[str]:
         """
@@ -160,7 +160,7 @@ class NemoTokenizer:
         Returns:
             토큰 리스트
         """
-        return self._tokenizer.convert_ids_to_tokens(ids)
+        return self._tokenizer.convert_ids_to_tokens(ids, skip_special_tokens)
     
     def convert_tokens_to_text(self, tokens: List[str], skip_special_tokens: bool = True) -> str:
         """
@@ -173,4 +173,4 @@ class NemoTokenizer:
         Returns:
             복원된 텍스트
         """
-        return self._tokenizer.convert_tokens_to_text(tokens)
+        return self._tokenizer.convert_tokens_to_text(tokens, skip_special_tokens)
