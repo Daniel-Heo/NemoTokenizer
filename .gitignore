@@ -42,3 +42,4 @@ Toilet/
 *.json
 test_tokenizer.py
 test_token.py
+test_speed.py
