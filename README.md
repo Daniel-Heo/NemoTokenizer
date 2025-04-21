@@ -84,20 +84,20 @@ print(f"Tokens: {tokens_array}")
 ids = tokenizer.encode(text, add_special_tokens=True)
 print(f"Token IDs: {ids}")
 
-# Decoding
-decoded_text = tokenizer.decode(ids)
-print(f"Decoded text: {decoded_text}")
-
 # Token -> ID conversion
-token_ids = tokenizer.convert_tokens_to_ids(tokens)
+token_ids = tokenizer.convert_tokens_to_ids(tokens, add_special_tokens=True)
 print(f"Token -> ID: {token_ids}")
 
+# Decoding
+decoded_text = tokenizer.decode(ids, skip_special_tokens=True)
+print(f"Decoded text: {decoded_text}")
+
 # ID -> Token conversion
-id_tokens = tokenizer.convert_ids_to_tokens(ids)
+id_tokens = tokenizer.convert_ids_to_tokens(ids, skip_special_tokens=True)
 print(f"ID -> Token: {id_tokens}")
 
 # Token -> Text conversion
-token_text = tokenizer.convert_tokens_to_text(tokens)
+token_text = tokenizer.convert_tokens_to_text(tokens, skip_special_tokens=True)
 print(f"Token -> TEXT: {token_text}")
 ```
 
